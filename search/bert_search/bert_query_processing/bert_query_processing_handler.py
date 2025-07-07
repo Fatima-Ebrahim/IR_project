@@ -11,7 +11,7 @@ class BertQueryProcessorHandler:
     """
     Handles loading the BERT model and processing a raw query into a vector embedding.
     """
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, model_name: str = 'all-mpnet-base-v2'):
         """
         Initializes the handler by loading the text processor and the
         pre-trained SentenceTransformer model.

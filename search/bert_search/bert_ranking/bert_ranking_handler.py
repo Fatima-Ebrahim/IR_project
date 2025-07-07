@@ -45,21 +45,32 @@ class BertRankingHandler:
         doc_matrix = self.assets['matrix']
         doc_ids = self.assets['ids']
         
-        # Reshape query vector for cosine similarity calculation
         query_vector_reshaped = np.array(query_vector).reshape(1, -1)
 
-        # 1. Calculate cosine similarity between the query and all documents
+        # 1. Calculate cosine similarity
         similarities = cosine_similarity(query_vector_reshaped, doc_matrix)
-        
-        # Flatten the similarities array to a 1D list of scores
         scores = similarities.flatten()
 
-        # 2. Get the indices of the top_k documents
-        # argsort returns indices that would sort the array. We reverse it and take the top k.
+        # 2. Get top_k document indices
         top_k_indices = np.argsort(scores)[::-1][:top_k]
 
         # 3. Map indices to document IDs and scores
         top_doc_ids = [doc_ids[i] for i in top_k_indices]
         top_scores = [scores[i] for i in top_k_indices]
 
-        # 4. Fetch document content from 
+        # 4. Fetch document content from the database
+        logger.info(f"   - Fetching content for top {len(top_doc_ids)} documents...")
+        documents_content = self.db_handler.find_documents_by_ids(top_doc_ids)
+
+        # 5. Build final results list
+        results = []
+        for i, doc_id in enumerate(top_doc_ids):
+            document_data = documents_content.get(str(doc_id), {})
+            results.append({
+                "doc_id": document_data.get('doc_id', str(doc_id)),
+                "score": float(top_scores[i]),
+                "document_text": document_data.get('raw_text', 'Content not found.')
+            })
+            
+        # (تصحيح) إضافة السطر المفقود لإرجاع قائمة النتائج
+        return results
