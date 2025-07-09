@@ -303,125 +303,126 @@
 # ////////////////////
 # # 
 # handlers/text_processing_handler.py
-import re
-import logging
-from typing import Set, List
-from functools import lru_cache
+#todo  هذا الكود زابط وهو يلي كنت عم اشتغل عليه بس حجرب غيره بغير مكتبة 
+# import re
+# import logging
+# from typing import Set, List
+# from functools import lru_cache
 
-import nltk
-from nltk.corpus import stopwords, wordnet
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import TreebankWordTokenizer
-from nltk.tag.perceptron import PerceptronTagger
-from spellchecker import SpellChecker
+# import nltk
+# from nltk.corpus import stopwords, wordnet
+# from nltk.stem import WordNetLemmatizer
+# from nltk.tokenize import TreebankWordTokenizer
+# from nltk.tag.perceptron import PerceptronTagger
+# from spellchecker import SpellChecker
 
-# --- شرح التعديلات ---
-# 1.  تم الاحتفاظ بتحسينات الأداء: استخدام @lru_cache وتهيئة PerceptronTagger مسبقاً.
-# 2.  تمت إعادة آلية التحميل التلقائي لموارد NLTK لضمان استقرار الخدمة.
-# 3.  تم تنظيم الكود ليعكس أفضل الممارسات من كلا الإصدارين.
+# # --- شرح التعديلات ---
+# # 1.  تم الاحتفاظ بتحسينات الأداء: استخدام @lru_cache وتهيئة PerceptronTagger مسبقاً.
+# # 2.  تمت إعادة آلية التحميل التلقائي لموارد NLTK لضمان استقرار الخدمة.
+# # 3.  تم تنظيم الكود ليعكس أفضل الممارسات من كلا الإصدارين.
 
-def get_wordnet_pos(treebank_tag: str) -> str:
-    """
-    Maps Treebank POS tags to WordNet POS tags for accurate lemmatization.
-    """
-    if treebank_tag.startswith('J'):
-        return wordnet.ADJ
-    elif treebank_tag.startswith('V'):
-        return wordnet.VERB
-    elif treebank_tag.startswith('N'):
-        return wordnet.NOUN
-    elif treebank_tag.startswith('R'):
-        return wordnet.ADV
-    else:
-        return wordnet.NOUN  # Default fallback
+# def get_wordnet_pos(treebank_tag: str) -> str:
+#     """
+#     Maps Treebank POS tags to WordNet POS tags for accurate lemmatization.
+#     """
+#     if treebank_tag.startswith('J'):
+#         return wordnet.ADJ
+#     elif treebank_tag.startswith('V'):
+#         return wordnet.VERB
+#     elif treebank_tag.startswith('N'):
+#         return wordnet.NOUN
+#     elif treebank_tag.startswith('R'):
+#         return wordnet.ADV
+#     else:
+#         return wordnet.NOUN  # Default fallback
 
-class TextProcessor:
-    """
-    Handles advanced text processing tasks with performance optimizations and robustness.
-    """
-    def __init__(self):
-        """
-        Initializes components and ensures all necessary NLTK resources are available.
-        """
-        # (مهم) إعادة آلية التحقق والتحميل التلقائي لضمان عدم حدوث خطأ LookupError
-        try:
-            nltk.data.find('taggers/averaged_perceptron_tagger')
-        except LookupError:
-            logging.warning("NLTK's 'averaged_perceptron_tagger' not found. Downloading...")
-            nltk.download('averaged_perceptron_tagger', quiet=True)
-            logging.info("Successfully downloaded 'averaged_perceptron_tagger'.")
+# class TextProcessor:
+#     """
+#     Handles advanced text processing tasks with performance optimizations and robustness.
+#     """
+#     def __init__(self):
+#         """
+#         Initializes components and ensures all necessary NLTK resources are available.
+#         """
+#         # (مهم) إعادة آلية التحقق والتحميل التلقائي لضمان عدم حدوث خطأ LookupError
+#         try:
+#             nltk.data.find('taggers/averaged_perceptron_tagger')
+#         except LookupError:
+#             logging.warning("NLTK's 'averaged_perceptron_tagger' not found. Downloading...")
+#             nltk.download('averaged_perceptron_tagger', quiet=True)
+#             logging.info("Successfully downloaded 'averaged_perceptron_tagger'.")
 
-        self.lemmatizer = WordNetLemmatizer()
-        self.stop_words: Set[str] = set(stopwords.words('english'))
-        self.tokenizer = TreebankWordTokenizer()
-        self.spell_checker = SpellChecker(language='en')
-        # تهيئة الـ Tagger مرة واحدة لتحسين الأداء
-        self.tagger = PerceptronTagger()
+#         self.lemmatizer = WordNetLemmatizer()
+#         self.stop_words: Set[str] = set(stopwords.words('english'))
+#         self.tokenizer = TreebankWordTokenizer()
+#         self.spell_checker = SpellChecker(language='en')
+#         # تهيئة الـ Tagger مرة واحدة لتحسين الأداء
+#         self.tagger = PerceptronTagger()
 
-    def remove_urls(self, text: str) -> str:
-        """Removes URLs from the text."""
-        return re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+#     def remove_urls(self, text: str) -> str:
+#         """Removes URLs from the text."""
+#         return re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
 
-    def remove_punctuation_and_non_alpha(self, text: str) -> str:
-        """Removes punctuation and non-alphabetic characters."""
-        # text = re.sub(r'[^a-zA-Z\s]', ' ', text)
-        text = re.sub(r'[^a-z0-9\s]', ' ', text)
-        return re.sub(r'\s+', ' ', text).strip()
+#     def remove_punctuation_and_non_alpha(self, text: str) -> str:
+#         """Removes punctuation and non-alphabetic characters."""
+#         # text = re.sub(r'[^a-zA-Z\s]', ' ', text)
+#         text = re.sub(r'[^a-z0-9\s]', ' ', text)
+#         return re.sub(r'\s+', ' ', text).strip()
 
-    # استخدام التخزين المؤقت (cache) لتسريع تصحيح الكلمات المكررة
-    @lru_cache(maxsize=10000)
-    def correct_word(self, word: str) -> str:
-        """Corrects a single word using a cache to avoid redundant lookups."""
-        corrected = self.spell_checker.correction(word)
-        return corrected if corrected else word
+#     # استخدام التخزين المؤقت (cache) لتسريع تصحيح الكلمات المكررة
+#     @lru_cache(maxsize=10000)
+#     def correct_word(self, word: str) -> str:
+#         """Corrects a single word using a cache to avoid redundant lookups."""
+#         corrected = self.spell_checker.correction(word)
+#         return corrected if corrected else word
 
-    def lemmatize_with_pos(self, tokens: List[str]) -> List[str]:
-        """Performs lemmatization using the pre-loaded POS tagger."""
-        pos_tags = self.tagger.tag(tokens)
-        return [
-            self.lemmatizer.lemmatize(word, get_wordnet_pos(pos))
-            for word, pos in pos_tags
-        ]
+#     def lemmatize_with_pos(self, tokens: List[str]) -> List[str]:
+#         """Performs lemmatization using the pre-loaded POS tagger."""
+#         pos_tags = self.tagger.tag(tokens)
+#         return [
+#             self.lemmatizer.lemmatize(word, get_wordnet_pos(pos))
+#             for word, pos in pos_tags
+#         ]
 
-def process_text_pipeline(text: str, processor: TextProcessor) -> str:
-    """
-    Applies a full, optimized sequence of text processing steps.
-    """
-    if not text or not isinstance(text, str):
-        return ""
+# def process_text_pipeline(text: str, processor: TextProcessor) -> str:
+#     """
+#     Applies a full, optimized sequence of text processing steps.
+#     """
+#     if not text or not isinstance(text, str):
+#         return ""
 
-    # Stage 1: Clean text
-    processed_text = processor.remove_urls(text)
-    processed_text = processed_text.lower()
-    processed_text = processor.remove_punctuation_and_non_alpha(processed_text)
+#     # Stage 1: Clean text
+#     processed_text = processor.remove_urls(text)
+#     processed_text = processed_text.lower()
+#     processed_text = processor.remove_punctuation_and_non_alpha(processed_text)
 
-    # Stage 2: Tokenize
-    words = processor.tokenizer.tokenize(processed_text)
+#     # Stage 2: Tokenize
+#     words = processor.tokenizer.tokenize(processed_text)
 
-    # Stage 3: Spell correction (with cache)
-    misspelled = processor.spell_checker.unknown(words)
-    corrected_words = [
-        processor.correct_word(word) if word in misspelled else word
-        for word in words
-    ]
+#     # Stage 3: Spell correction (with cache)
+#     misspelled = processor.spell_checker.unknown(words)
+#     corrected_words = [
+#         processor.correct_word(word) if word in misspelled else word
+#         for word in words
+#     ]
 
-    # Stage 4: Filter stopwords and short tokens
-    filtered_words = [
-        word for word in corrected_words
-        if word not in processor.stop_words and len(word) >= 3
-    ]
-    if not filtered_words:
-        return ""
+#     # Stage 4: Filter stopwords and short tokens
+#     filtered_words = [
+#         word for word in corrected_words
+#         if word not in processor.stop_words and len(word) >= 3
+#     ]
+#     if not filtered_words:
+#         return ""
 
-    # Stage 5: Lemmatization with POS
-    lemmatized_words = processor.lemmatize_with_pos(filtered_words)
+#     # Stage 5: Lemmatization with POS
+#     lemmatized_words = processor.lemmatize_with_pos(filtered_words)
 
-    # Stage 6: Final join
-    final_text = ' '.join(lemmatized_words)
+#     # Stage 6: Final join
+#     final_text = ' '.join(lemmatized_words)
 
-    # هذه الرسالة هي مؤشر التقدم في بيئة الخادم
-    logging.info("Successfully processed one text entry.")
-    return final_text
+#     # هذه الرسالة هي مؤشر التقدم في بيئة الخادم
+#     logging.info("Successfully processed one text entry.")
+#     return final_text
 # هي يلي فوق شغالة تمام بس بتروح الارقام
 # ///////////////
 # # handlers/text_processing_handler.py
@@ -537,3 +538,139 @@ def process_text_pipeline(text: str, processor: TextProcessor) -> str:
 #     """
 #     return processor.process(text)
 
+# todo  هاذ الكود يلي حجرب غير مكتبة للتصحيح الاملائي 
+# handlers/text_processing_handler.py
+import re
+import os
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords, wordnet
+from nltk.stem import WordNetLemmatizer
+from nltk.tag import PerceptronTagger
+from symspellpy import SymSpell, Verbosity # <-- استخدام المكتبة الموحدة
+from typing import List, Set
+from multiprocessing import Pool
+from tqdm import tqdm
+
+from utils import config
+from database.database_handler import DatabaseHandler
+from utils.logger_config import logger
+
+# --- Global variable for each worker process to hold the tagger ---
+worker_tagger = None
+
+def worker_initializer():
+    """
+    This function is called once for each worker process.
+    It ensures that each process has the necessary NLTK data and
+    initializes a tagger instance for that specific process to use.
+    """
+    global worker_tagger
+    logger.info(f"Initializing worker process [PID: {os.getpid()}]...")
+    packages = ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']
+    for package in packages:
+        try:
+            nltk.data.find(f'tokenizers/{package}' if package == 'punkt' else f'taggers/{package}' if 'tagger' in package else f'corpora/{package}')
+        except LookupError:
+            logger.info(f"Worker [PID: {os.getpid()}] downloading NLTK package: {package}...")
+            nltk.download(package, quiet=True)
+    
+    worker_tagger = PerceptronTagger()
+    logger.info(f"Worker process [PID: {os.getpid()}] initialized successfully.")
+
+
+class TextProcessingHandler:
+    """
+    The single, unified handler for all advanced text processing tasks.
+    Uses symspellpy for spell correction.
+    """
+    def __init__(self):
+        self.lemmatizer = WordNetLemmatizer()
+        negation_words = {'no', 'not', 'nor', 'never'}
+        self.stop_words: Set[str] = set(stopwords.words('english'))
+        self.stop_words.difference_update(negation_words)
+        self.pos_map = {'J': wordnet.ADJ, 'V': wordnet.VERB, 'N': wordnet.NOUN, 'R': wordnet.ADV}
+        # Initialize the unified spell corrector
+        self.sym_spell = self._setup_symspell(config.SYMPSPELL_DICT_PATH)
+        # The tagger will be initialized in the worker processes
+
+    def _setup_symspell(self, path: str) -> SymSpell:
+        """Initializes the SymSpell spell corrector."""
+        sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+        if not os.path.exists(path):
+            logger.warning(f"SymSpell dictionary not found at {path}. Spell correction will be skipped.")
+            return sym_spell
+        if not sym_spell.load_dictionary(path, term_index=0, count_index=1, encoding='utf-8'):
+            logger.warning(f"SymSpell dictionary at {path} could not be loaded.")
+        return sym_spell
+
+    def _get_wordnet_pos(self, tag: str) -> str:
+        return self.pos_map.get(tag[0].upper(), wordnet.NOUN)
+
+    def _process_single_text(self, text: str) -> str:
+        """Core processing function for a single text string."""
+        global worker_tagger
+        if not isinstance(text, str) or not text: return ""
+        
+        # 1. Cleaning
+        text = re.sub(r'http\S+|www\S+|https\S+', '', text)
+        text = re.sub(r'[^\x00-\x7F]+', ' ', text)
+        
+        # 2. Spell Correction using symspellpy
+        # We correct the whole sentence for better context awareness
+        suggestions = self.sym_spell.lookup_compound(text, max_edit_distance=2)
+        if suggestions:
+            text = suggestions[0].term
+        
+        # 3. Normalization and Tokenization
+        tokens = word_tokenize(text.lower())
+        
+        # 4. Filtering
+        filtered_tokens = [w for w in tokens if re.match(r'^[a-zA-Z0-9\-]+$', w) and w not in self.stop_words and len(w) > 1]
+        
+        # 5. POS Tagging
+        if worker_tagger is None:
+            # Fallback initializer if the worker wasn't set up correctly
+            worker_initializer()
+        pos_tagged = worker_tagger.tag(filtered_tokens)
+        
+        # 6. Lemmatization
+        lemmatized = [self.lemmatizer.lemmatize(token, self._get_wordnet_pos(pos)) for token, pos in pos_tagged]
+        
+        return ' '.join(lemmatized)
+
+    def run_corpus_processing(self, dataset_name: str, batch_size: int, num_cores: int):
+        """Runs the full processing pipeline for a corpus. Manages its own DB connection."""
+        db_handler = None
+        try:
+            db_handler = DatabaseHandler(config.MYSQL_CONFIG)
+            db_handler.connect()
+            db_handler.setup_tables()
+
+            logger.info(f"Starting text processing pipeline for dataset: '{dataset_name}'")
+            
+            total_processed_count = 0
+            while True:
+                docs_to_process = db_handler.get_unprocessed_docs(dataset_name, batch_size)
+                if not docs_to_process:
+                    logger.info("No more unprocessed documents found. Pipeline complete.")
+                    break
+
+                logger.info(f"Processing a batch of {len(docs_to_process)} documents using {num_cores} cores...")
+                
+                texts = [doc['raw_text'] for doc in docs_to_process]
+                
+                with Pool(num_cores, initializer=worker_initializer) as pool:
+                    processed_texts = list(tqdm(pool.imap(self._process_single_text, texts), total=len(texts), desc="Processing Batch"))
+
+                updates = [(processed, docs_to_process[i]['id']) for i, processed in enumerate(processed_texts)]
+                
+                updated_count = db_handler.bulk_update_processed_text(updates)
+                total_processed_count += updated_count
+                logger.info(f"Successfully updated {updated_count} documents in the database. Total processed: {total_processed_count}")
+        
+        except Exception as e:
+            logger.error(f"A critical error occurred during text processing for '{dataset_name}': {e}", exc_info=True)
+        finally:
+            if db_handler:
+                db_handler.disconnect()

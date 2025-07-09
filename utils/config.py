@@ -38,24 +38,31 @@ DATASET_CONFIGS = {
         "id_pattern": r'^\d+_\d+\t',
         "metadata_type": "qa_answer"
     },
-    "clinical_trials": {
-        "file_name": "clinicaltrials/collection.tsv",
-        "parser_func": "parse_generic_line",
-        "id_pattern": r'^NCT\d{7,}\t',
-        "metadata_type": "generic"
-    },
+    # "clinical_trials": {
+    #     "file_name": "clinicaltrials/collection.tsv",
+    #     "parser_func": "parse_generic_line",
+    #     "id_pattern": r'^NCT\d{7,}\t',
+    #     "metadata_type": "generic"
+    # },
     "wikIR1k": {
         "file_name": "wikIR1k/documents.csv", # نفترض أنه ملف CSV
         "parser_func": "parse_wikir_csv_line",
         "id_pattern": None, # لا نحتاج نمطًا لملفات CSV
         "metadata_type": "generic"
     },
-    "wiki": {
-        "file_name": "wiki_test.csv", # نفترض أنه ملف CSV
-        "parser_func": "parse_wikir_csv_line",
-        "id_pattern": None, # لا نحتاج نمطًا لملفات CSV
-        "metadata_type": "generic"
-    }
+    # "wiki": {
+    #     "file_name": "wiki_test.csv", # نفترض أنه ملف CSV
+    #     "parser_func": "parse_wikir_csv_line",
+    #     "id_pattern": None, # لا نحتاج نمطًا لملفات CSV
+    #     "metadata_type": "generic"
+    # }
 }
 # OUTPUT_DIR = "E:/information-retrieval-project/saved_models"
 OUTPUT_DIR = "E:/information_test/saved_models"
+# --- Service URLs ---
+# This is the new, centralized location for all service addresses
+GATEWAY_URL = "http://127.0.0.1:8000"
+TFIDF_SEARCH_URL = "http://127.0.0.1:8031"
+BERT_SEARCH_URL = "http://127.0.0.1:8034"
+HYBRID_SEARCH_URL = "http://127.0.0.1:8035"
+# Add other service URLs here if needed

@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Literal
 # These should be configurable in a real-world application
 TFIDF_SEARCH_URL = "http://127.0.0.1:8031" # The self-contained TF-IDF service
 BERT_SEARCH_URL = "http://127.0.0.1:8034"  # The BERT orchestrator service
-
+HYBRID_SEARCH_URL = "http://127.0.0.1:8035"
 app = FastAPI(
     title="Unified Search Gateway",
     description="A gateway that routes search requests to the appropriate specialized service (TF-IDF or BERT).",
@@ -19,7 +19,7 @@ app = FastAPI(
 class UnifiedSearchRequest(BaseModel):
     query: str
     dataset_name: str
-    model_type: Literal['tfidf', 'bert'] # Ensures model_type is one of these two
+    model_type: Literal['tfidf', 'bert', 'hybrid'] 
     top_k: int = Field(10, gt=0, le=50)
 
 class SearchResult(BaseModel):
@@ -48,11 +48,14 @@ async def unified_search(request: UnifiedSearchRequest):
         target_url = f"{TFIDF_SEARCH_URL}/search-tfidf"
     elif request.model_type == 'bert':
         target_url = f"{BERT_SEARCH_URL}/search/bert"
+    elif request.model_type == 'hybrid': 
+        target_url = f"{HYBRID_SEARCH_URL}/search-hybrid" 
+    
     else:
         # This case is technically handled by Pydantic validation, but it's good practice
-        raise HTTPException(
+       raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid 'model_type'. Must be 'tfidf' or 'bert'."
+            detail="Invalid 'model_type'. Must be 'tfidf', 'bert', or 'hybrid'."
         )
 
     # Forward the request to the specialized service
@@ -65,7 +68,19 @@ async def unified_search(request: UnifiedSearchRequest):
         except httpx.RequestError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Error communicating with a search service: {exc}")
         except httpx.HTTPStatusError as exc:
-            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.json())
+    # This new block is safer
+            detail_content = exc.response.text
+            try:
+                # We try to parse it as JSON
+                detail_content = exc.response.json()
+            except Exception:
+                # If it fails, we just use the raw text (which might be empty)
+                pass 
+            
+            raise HTTPException(
+                status_code=exc.response.status_code,
+                detail=detail_content
+            )
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

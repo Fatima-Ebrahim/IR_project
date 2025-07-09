@@ -5,9 +5,9 @@ import joblib
 import numpy as np
 from typing import Dict
 
-from TextProcessing import TextProcessor, process_text_pipeline
+from text_processing.text_processing_handler import TextProcessor, process_text_pipeline
 from utils.config import OUTPUT_DIR
-from handlers.tfidf_handler import TfIdfHandler
+from tfidf_representation.tfidf_handler import TfIdfHandler
 class QueryProcessorHandler:
     """
     يعالج عمليات تحميل النماذج ومعالجة الاستعلامات.
