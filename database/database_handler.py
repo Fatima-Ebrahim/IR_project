@@ -166,3 +166,17 @@ class DatabaseHandler:
         except mysql.connector.Error as err:
             logger.error(f"Database error in find_documents_by_ids: {err}")
             return {}
+        
+    def get_all_raw_docs(self, dataset_name: str) -> List[Dict[str, Any]]:
+        """
+        Fetches the primary key (id) and raw_text for ALL documents in a given dataset.
+        WARNING: This can be memory-intensive for very large datasets.
+        """
+        logger.info(f"Fetching ALL RAW documents for dataset: {dataset_name}")
+        dataset_id = self.get_or_create_dataset_id(dataset_name)
+        # نختار فقط id و raw_text لتقليل استهلاك الذاكرة
+        query = "SELECT id, doc_id, raw_text FROM documents WHERE dataset_id = %s AND raw_text IS NOT NULL AND raw_text != ''"
+        self.cursor.execute(query, (dataset_id,))
+        docs = self.cursor.fetchall()
+        logger.info(f"Found {len(docs)} total raw documents for dataset '{dataset_name}'.")
+        return docs

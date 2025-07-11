@@ -539,7 +539,147 @@
 #     return processor.process(text)
 
 # todo  هاذ الكود يلي حجرب غير مكتبة للتصحيح الاملائي 
+
+# todo والتحتانةنسخة شغالة تمام مع غير مكتبة 
+# # handlers/text_processing_handler.py
+# import re
+# import os
+# import nltk
+# from nltk.tokenize import word_tokenize
+# from nltk.corpus import stopwords, wordnet
+# from nltk.stem import WordNetLemmatizer
+# from nltk.tag import PerceptronTagger
+# from symspellpy import SymSpell, Verbosity # <-- استخدام المكتبة الموحدة
+# from typing import List, Set
+# from multiprocessing import Pool
+# from tqdm import tqdm
+
+# from utils import config
+# from database.database_handler import DatabaseHandler
+# from utils.logger_config import logger
+
+# # --- Global variable for each worker process to hold the tagger ---
+# worker_tagger = None
+
+# def worker_initializer():
+#     """
+#     This function is called once for each worker process.
+#     It ensures that each process has the necessary NLTK data and
+#     initializes a tagger instance for that specific process to use.
+#     """
+#     global worker_tagger
+#     logger.info(f"Initializing worker process [PID: {os.getpid()}]...")
+#     packages = ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']
+#     for package in packages:
+#         try:
+#             nltk.data.find(f'tokenizers/{package}' if package == 'punkt' else f'taggers/{package}' if 'tagger' in package else f'corpora/{package}')
+#         except LookupError:
+#             logger.info(f"Worker [PID: {os.getpid()}] downloading NLTK package: {package}...")
+#             nltk.download(package, quiet=True)
+    
+#     worker_tagger = PerceptronTagger()
+#     logger.info(f"Worker process [PID: {os.getpid()}] initialized successfully.")
+
+
+# class TextProcessingHandler:
+#     """
+#     The single, unified handler for all advanced text processing tasks.
+#     Uses symspellpy for spell correction.
+#     """
+#     def __init__(self):
+#         self.lemmatizer = WordNetLemmatizer()
+#         negation_words = {'no', 'not', 'nor', 'never'}
+#         self.stop_words: Set[str] = set(stopwords.words('english'))
+#         self.stop_words.difference_update(negation_words)
+#         self.pos_map = {'J': wordnet.ADJ, 'V': wordnet.VERB, 'N': wordnet.NOUN, 'R': wordnet.ADV}
+#         # Initialize the unified spell corrector
+#         self.sym_spell = self._setup_symspell(config.SYMPSPELL_DICT_PATH)
+#         # The tagger will be initialized in the worker processes
+
+#     def _setup_symspell(self, path: str) -> SymSpell:
+#         """Initializes the SymSpell spell corrector."""
+#         sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+#         if not os.path.exists(path):
+#             logger.warning(f"SymSpell dictionary not found at {path}. Spell correction will be skipped.")
+#             return sym_spell
+#         if not sym_spell.load_dictionary(path, term_index=0, count_index=1, encoding='utf-8'):
+#             logger.warning(f"SymSpell dictionary at {path} could not be loaded.")
+#         return sym_spell
+
+#     def _get_wordnet_pos(self, tag: str) -> str:
+#         return self.pos_map.get(tag[0].upper(), wordnet.NOUN)
+
+#     def _process_single_text(self, text: str) -> str:
+#         """Core processing function for a single text string."""
+#         global worker_tagger
+#         if not isinstance(text, str) or not text: return ""
+        
+#         # 1. Cleaning
+#         text = re.sub(r'http\S+|www\S+|https\S+', '', text)
+#         text = re.sub(r'[^\x00-\x7F]+', ' ', text)
+        
+#         # 2. Spell Correction using symspellpy
+#         # We correct the whole sentence for better context awareness
+#         suggestions = self.sym_spell.lookup_compound(text, max_edit_distance=2)
+#         if suggestions:
+#             text = suggestions[0].term
+        
+#         # 3. Normalization and Tokenization
+#         tokens = word_tokenize(text.lower())
+        
+#         # 4. Filtering
+#         filtered_tokens = [w for w in tokens if re.match(r'^[a-zA-Z0-9\-]+$', w) and w not in self.stop_words and len(w) > 1]
+        
+#         # 5. POS Tagging
+#         if worker_tagger is None:
+#             # Fallback initializer if the worker wasn't set up correctly
+#             worker_initializer()
+#         pos_tagged = worker_tagger.tag(filtered_tokens)
+        
+#         # 6. Lemmatization
+#         lemmatized = [self.lemmatizer.lemmatize(token, self._get_wordnet_pos(pos)) for token, pos in pos_tagged]
+        
+#         return ' '.join(lemmatized)
+
+#     def run_corpus_processing(self, dataset_name: str, batch_size: int, num_cores: int):
+#         """Runs the full processing pipeline for a corpus. Manages its own DB connection."""
+#         db_handler = None
+#         try:
+#             db_handler = DatabaseHandler(config.MYSQL_CONFIG)
+#             db_handler.connect()
+#             db_handler.setup_tables()
+
+#             logger.info(f"Starting text processing pipeline for dataset: '{dataset_name}'")
+            
+#             total_processed_count = 0
+#             while True:
+#                 docs_to_process = db_handler.get_unprocessed_docs(dataset_name, batch_size)
+#                 if not docs_to_process:
+#                     logger.info("No more unprocessed documents found. Pipeline complete.")
+#                     break
+
+#                 logger.info(f"Processing a batch of {len(docs_to_process)} documents using {num_cores} cores...")
+                
+#                 texts = [doc['raw_text'] for doc in docs_to_process]
+                
+#                 with Pool(num_cores, initializer=worker_initializer) as pool:
+#                     processed_texts = list(tqdm(pool.imap(self._process_single_text, texts), total=len(texts), desc="Processing Batch"))
+
+#                 updates = [(processed, docs_to_process[i]['id']) for i, processed in enumerate(processed_texts)]
+                
+#                 updated_count = db_handler.bulk_update_processed_text(updates)
+#                 total_processed_count += updated_count
+#                 logger.info(f"Successfully updated {updated_count} documents in the database. Total processed: {total_processed_count}")
+        
+#         except Exception as e:
+#             logger.error(f"A critical error occurred during text processing for '{dataset_name}': {e}", exc_info=True)
+#         finally:
+#             if db_handler:
+#                 db_handler.disconnect()
 # handlers/text_processing_handler.py
+# handlers/query_processor_handler.py
+# handlers/text_processing_handler.py
+# text_processing/text_processing_handler.py
 import re
 import os
 import nltk
@@ -547,7 +687,22 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tag import PerceptronTagger
-from symspellpy import SymSpell, Verbosity # <-- استخدام المكتبة الموحدة
+from symspellpy import SymSpell
+from typing import List, Set
+from multiprocessing import Pool
+from tqdm import tqdm
+
+from utils import config
+from database.database_handler import DatabaseHandler
+# text_processing/text_processing_handler.py
+import re
+import os
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords, wordnet
+from nltk.stem import WordNetLemmatizer
+from nltk.tag import PerceptronTagger
+from symspellpy import SymSpell
 from typing import List, Set
 from multiprocessing import Pool
 from tqdm import tqdm
@@ -556,15 +711,9 @@ from utils import config
 from database.database_handler import DatabaseHandler
 from utils.logger_config import logger
 
-# --- Global variable for each worker process to hold the tagger ---
 worker_tagger = None
 
 def worker_initializer():
-    """
-    This function is called once for each worker process.
-    It ensures that each process has the necessary NLTK data and
-    initializes a tagger instance for that specific process to use.
-    """
     global worker_tagger
     logger.info(f"Initializing worker process [PID: {os.getpid()}]...")
     packages = ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']
@@ -580,22 +729,15 @@ def worker_initializer():
 
 
 class TextProcessingHandler:
-    """
-    The single, unified handler for all advanced text processing tasks.
-    Uses symspellpy for spell correction.
-    """
     def __init__(self):
         self.lemmatizer = WordNetLemmatizer()
         negation_words = {'no', 'not', 'nor', 'never'}
         self.stop_words: Set[str] = set(stopwords.words('english'))
         self.stop_words.difference_update(negation_words)
         self.pos_map = {'J': wordnet.ADJ, 'V': wordnet.VERB, 'N': wordnet.NOUN, 'R': wordnet.ADV}
-        # Initialize the unified spell corrector
         self.sym_spell = self._setup_symspell(config.SYMPSPELL_DICT_PATH)
-        # The tagger will be initialized in the worker processes
 
     def _setup_symspell(self, path: str) -> SymSpell:
-        """Initializes the SymSpell spell corrector."""
         sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
         if not os.path.exists(path):
             logger.warning(f"SymSpell dictionary not found at {path}. Spell correction will be skipped.")
@@ -607,68 +749,67 @@ class TextProcessingHandler:
     def _get_wordnet_pos(self, tag: str) -> str:
         return self.pos_map.get(tag[0].upper(), wordnet.NOUN)
 
+    def get_spell_corrected_text(self, text: str) -> str:
+        """
+        Performs spell correction only and returns a cleaned result.
+        This is intended for user display ("Showing results for...").
+        """
+        if not isinstance(text, str) or not text: return ""
+        
+        suggestions = self.sym_spell.lookup_compound(text, max_edit_distance=2)
+        
+        if suggestions:
+            corrected_text = suggestions[0].term
+            # --- (الحل لمشكلة الرمز الغريب) ---
+            # تنظيف النص المصحح من أي أحرف غير قياسية قبل إرجاعه
+            cleaned_text = re.sub(r'[^\x00-\x7F]+', ' ', corrected_text).strip()
+            return cleaned_text
+        
+        return text
+
     def _process_single_text(self, text: str) -> str:
-        """Core processing function for a single text string."""
+        """
+        Performs the FULL processing pipeline for vectorization.
+        """
         global worker_tagger
         if not isinstance(text, str) or not text: return ""
         
-        # 1. Cleaning
-        text = re.sub(r'http\S+|www\S+|https\S+', '', text)
-        text = re.sub(r'[^\x00-\x7F]+', ' ', text)
+        corrected_text = self.get_spell_corrected_text(text)
         
-        # 2. Spell Correction using symspellpy
-        # We correct the whole sentence for better context awareness
-        suggestions = self.sym_spell.lookup_compound(text, max_edit_distance=2)
-        if suggestions:
-            text = suggestions[0].term
+        tokens = word_tokenize(corrected_text.lower())
         
-        # 3. Normalization and Tokenization
-        tokens = word_tokenize(text.lower())
-        
-        # 4. Filtering
         filtered_tokens = [w for w in tokens if re.match(r'^[a-zA-Z0-9\-]+$', w) and w not in self.stop_words and len(w) > 1]
         
-        # 5. POS Tagging
         if worker_tagger is None:
-            # Fallback initializer if the worker wasn't set up correctly
             worker_initializer()
         pos_tagged = worker_tagger.tag(filtered_tokens)
         
-        # 6. Lemmatization
         lemmatized = [self.lemmatizer.lemmatize(token, self._get_wordnet_pos(pos)) for token, pos in pos_tagged]
         
         return ' '.join(lemmatized)
 
     def run_corpus_processing(self, dataset_name: str, batch_size: int, num_cores: int):
-        """Runs the full processing pipeline for a corpus. Manages its own DB connection."""
+        """Runs the full processing pipeline for a corpus."""
         db_handler = None
         try:
             db_handler = DatabaseHandler(config.MYSQL_CONFIG)
             db_handler.connect()
             db_handler.setup_tables()
-
             logger.info(f"Starting text processing pipeline for dataset: '{dataset_name}'")
-            
             total_processed_count = 0
             while True:
                 docs_to_process = db_handler.get_unprocessed_docs(dataset_name, batch_size)
                 if not docs_to_process:
                     logger.info("No more unprocessed documents found. Pipeline complete.")
                     break
-
                 logger.info(f"Processing a batch of {len(docs_to_process)} documents using {num_cores} cores...")
-                
                 texts = [doc['raw_text'] for doc in docs_to_process]
-                
                 with Pool(num_cores, initializer=worker_initializer) as pool:
                     processed_texts = list(tqdm(pool.imap(self._process_single_text, texts), total=len(texts), desc="Processing Batch"))
-
                 updates = [(processed, docs_to_process[i]['id']) for i, processed in enumerate(processed_texts)]
-                
                 updated_count = db_handler.bulk_update_processed_text(updates)
                 total_processed_count += updated_count
                 logger.info(f"Successfully updated {updated_count} documents in the database. Total processed: {total_processed_count}")
-        
         except Exception as e:
             logger.error(f"A critical error occurred during text processing for '{dataset_name}': {e}", exc_info=True)
         finally:

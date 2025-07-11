@@ -110,55 +110,83 @@
 #     return {"status": "Simplified Text Processor Service is running!"}
 #todo الكود يلي قبل شغال تمام مع النسخة يلي عليها اورانج من الهاندلر 
     # services/text_processor_service.py
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from pydantic import BaseModel
+# services/query_processor_service.py
+from fastapi import FastAPI, HTTPException, status, Depends
+from pydantic import BaseModel, Field
+from typing import Literal, List, Dict, Annotated
+from contextlib import asynccontextmanager
 
-from utils import config
-# --- (التعديل) استيراد الكلاس الجديد بالاسم الصحيح ---
+from handlers.query_processor_handler import QueryProcessorHandler
 from text_processing.text_processing_handler import TextProcessingHandler
-from database.database_handler import DatabaseHandler
 from utils.logger_config import logger
 
+# --- (الحل للسرعة) متغير عام سيحتوي على النسخة الوحيدة من المعالج ---
+shared_text_processor: TextProcessingHandler | None = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    This function runs when the service starts up.
+    It creates a single, shared instance of the TextProcessingHandler
+    to avoid reloading the heavy spell-checking dictionary on every request.
+    """
+    global shared_text_processor
+    logger.info("Query Processor Service is starting up...")
+    # إنشاء النسخة الوحيدة عند بدء التشغيل
+    shared_text_processor = TextProcessingHandler()
+    logger.info("Shared TextProcessingHandler initialized successfully.")
+    yield
+    # Clean up resources if needed when the app shuts down
+    logger.info("Query Processor Service is shutting down.")
+    shared_text_processor = None
+
 app = FastAPI(
-    title="Text Processor Microservice",
-    description="A microservice for advanced text processing.",
-    version="2.0.0"
+    title="Optimized Query Processor Service",
+    description="Processes queries efficiently by loading models only once.",
+    lifespan=lifespan # <-- تطبيق الـ lifespan لتهيئة الموارد عند الإقلاع
 )
 
-class DataRequest(BaseModel):
-    dataset_name: str
+class QueryRequest(BaseModel):
+    query: str = Field(..., example="what is cancre")
 
-def run_processing_task(dataset_name: str):
+class ProcessedQueryResponse(BaseModel):
+    corrected_query_display: str
+    query_vector: List[List[float]]
+
+def get_text_processor() -> TextProcessingHandler:
+    """Dependency function to get the shared instance of the text processor."""
+    return shared_text_processor
+
+# --- استخدام حقن التبعية (Dependency Injection) للحصول على النسخة المشتركة ---
+ProcessorDependency = Annotated[TextProcessingHandler, Depends(get_text_processor)]
+
+@app.post(
+    "/process-query/{dataset_name}/{model_type}",
+    response_model=ProcessedQueryResponse,
+    tags=["Query Processing"]
+)
+async def process_query(
+    dataset_name: str,
+    model_type: Literal['tfidf', 'bert'],
+    request: QueryRequest,
+    # --- FastAPI ستقوم بتمرير النسخة المشتركة تلقائياً هنا ---
+    processor: ProcessorDependency
+):
     """
-    The background task for processing a dataset.
-    It creates its own handler instances.
+    Takes a raw query and returns the spell-corrected text for display,
+    along with the final query vector for ranking.
     """
     try:
-        # --- (التعديل) إنشاء نسخة من الكلاس الجديد ---
-        # لم نعد بحاجة لتمرير المعالج، المهمة تنشئه بنفسها
-        processing_handler = TextProcessingHandler() # لا يحتاج لمسار القاموس لأنه يقرأه من config
-        processing_handler.run_corpus_processing(
-            dataset_name=dataset_name,
-            batch_size=config.BATCH_SIZE,
-            num_cores=config.CPU_CORES
+        # --- تمرير النسخة المشتركة إلى الـ handler ---
+        handler = QueryProcessorHandler(dataset_name, model_type, text_processor=processor)
+        handler_result = handler.process(request.query)
+        
+        return ProcessedQueryResponse(
+            corrected_query_display=handler_result["corrected_query_display"],
+            query_vector=handler_result["query_vector"]
         )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        logger.error(f"Failed to run background processing task for {dataset_name}: {e}", exc_info=True)
-
-
-@app.post("/process-data", status_code=202)
-def process_data_endpoint(request: DataRequest, background_tasks: BackgroundTasks):
-    """
-    Triggers the text processing pipeline in the background.
-    """
-    dataset_name = request.dataset_name
-    logger.info(f"Received request to process dataset: '{dataset_name}'. Task added to background.")
-    
-    # --- (التعديل) استدعاء الدالة الجديدة للمهمة الخلفية ---
-    background_tasks.add_task(run_processing_task, dataset_name)
-
-    return {"message": f"Text processing for '{dataset_name}' has been started in the background."}
-
-@app.get("/health", tags=["Health Check"])
-def health_check():
-    return {"status": "Text Processor Service is running!"}
+        logger.error(f"An error occurred during query processing: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

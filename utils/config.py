@@ -20,8 +20,8 @@ CPU_CORES = os.cpu_count() or 1 # عدد أنوية المعالج للمعال�
 BASE_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # مسار مجلد مجموعات البيانات
-# DATASETS_BASE_DIR = "E:/information-retrieval-project/datasets" # <--- ❗️ عدّل هذا المسار
-DATASETS_BASE_DIR = "E:/information_test/datasets" # <--- ❗️ عدّل هذا المسار
+# DATASETS_BASE_DIR = "E:/information-retrieval-project/datasets" 
+DATASETS_BASE_DIR = "E:/information_test/datasets" 
 # مسار قاموس التصحيح الإملائي
 # قم بتنزيل القاموس وضعه في مسار معروف
 SYMPSPELL_DICT_PATH = os.path.join(DATASETS_BASE_DIR, "symspell_dictionary", "frequency_dictionary_en_82_765.txt") # <--- ❗️ تأكد من صحة هذا المسار
