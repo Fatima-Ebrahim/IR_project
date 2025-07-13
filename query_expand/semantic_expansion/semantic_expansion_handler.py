@@ -10,12 +10,8 @@ from utils import config
 from utils.logger_config import logger
 from database.database_handler import DatabaseHandler
 
+
 class SemanticExpansionHandler:
-    """
-    Expands queries by:
-    1. Finding similar documents using BERT embeddings.
-    2. Extracting expansion terms from those documents using TF-IDF.
-    """
     def __init__(self, dataset_name: str, db_config: dict, model_name: str = 'all-mpnet-base-v2'):
         self.dataset_name = dataset_name
         self.model_name = model_name
@@ -23,7 +19,6 @@ class SemanticExpansionHandler:
         self.db.connect()
 
         logger.info(f"[SemanticExpansion] Initializing for dataset: {dataset_name}")
-        logger.info(f"[SemanticExpansion] Loading embedding model: {model_name}")
         self.embedding_model = SentenceTransformer(model_name)
 
         self._load_assets()
@@ -41,7 +36,7 @@ class SemanticExpansionHandler:
         logger.info("Loading BERT and TF-IDF assets...")
 
         if not all(os.path.exists(p) for p in paths.values()):
-            raise FileNotFoundError("Missing required embedding/vectorizer files. Please generate them first.")
+            raise FileNotFoundError("Missing required embedding/vectorizer files.")
 
         self.doc_embeddings = joblib.load(paths["doc_embeddings"])
         self.doc_ids = joblib.load(paths["doc_ids"])
@@ -49,6 +44,9 @@ class SemanticExpansionHandler:
         self.vocab = self.vectorizer.get_feature_names_out()
 
         logger.info(f"Loaded {len(self.doc_ids)} doc embeddings and TF-IDF vectorizer.")
+
+    def _split_into_sentences(self, text: str) -> List[str]:
+        return [s.strip() for s in text.split('.') if s.strip()]
 
     def expand(self, query: str, top_k: int = 5, threshold: float = 0.4) -> Dict[str, Any]:
         if not query.strip():
@@ -61,7 +59,6 @@ class SemanticExpansionHandler:
         candidate_indices = np.where(similarities >= threshold)[0]
 
         if len(candidate_indices) == 0:
-            logger.info("No documents matched the threshold.")
             return {"expanded_query": query, "expansion_terms": []}
 
         top_indices = sorted(candidate_indices, key=lambda i: similarities[i], reverse=True)[:top_k]
@@ -75,7 +72,22 @@ class SemanticExpansionHandler:
             logger.warning("No text content retrieved from DB.")
             return {"expanded_query": query, "expansion_terms": []}
 
-        doc_term_matrix = self.vectorizer.transform(matched_texts)
+        
+        top_sentences = []
+        for text in matched_texts:
+            sentences = self._split_into_sentences(text)
+            sentence_embeddings = self.embedding_model.encode(sentences, normalize_embeddings=True)
+            sent_sims = cosine_similarity(query_embedding, sentence_embeddings).flatten()
+
+            top_sentences.extend([
+                s for sim, s in sorted(zip(sent_sims, sentences), reverse=True) if sim >= 0.5
+            ])
+
+        if not top_sentences:
+            logger.warning("No similar sentences found.")
+            return {"expanded_query": query, "expansion_terms": []}
+
+        doc_term_matrix = self.vectorizer.transform(top_sentences)
         term_scores = np.asarray(doc_term_matrix.sum(axis=0)).flatten()
 
         top_term_indices = term_scores.argsort()[::-1]

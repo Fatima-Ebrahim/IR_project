@@ -6,20 +6,14 @@ from contextlib import asynccontextmanager
 
 from .semantic_expansion_handler import SemanticExpansionHandler
 from utils.logger_config import logger
-from utils import config
-# --- Singleton Pattern for Handlers ---
-# A dictionary to hold one handler instance per dataset
+from utils.config import MYSQL_CONFIG
+
 shared_handlers: Dict[str, SemanticExpansionHandler] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    A lifespan manager that pre-warms the cache for specified datasets if needed.
-    """
+    
     logger.info("Semantic Expansion Service is starting up...")
-    # You can pre-warm a popular dataset here if you want
-    # logger.info("Pre-warming handler for 'antique_qa' dataset...")
-    # shared_handlers['antique_qa'] = SemanticExpansionHandler('antique_qa')
     yield
     logger.info("Semantic Expansion Service is shutting down.")
     shared_handlers.clear()
@@ -30,20 +24,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# --- Dependency Injection ---
+
 def get_handler(dataset_name: str) -> SemanticExpansionHandler:
-    """
-    This function acts as a dependency. It creates a handler for a dataset
-    the first time it's requested and then reuses it for subsequent requests.
-    """
-    def get_handler(dataset_name: str) -> SemanticExpansionHandler:
-        if dataset_name not in shared_handlers:
-            logger.info(f"Creating a new SemanticExpansionHandler for dataset '{dataset_name}'.")
-            try:
-                shared_handlers[dataset_name] = SemanticExpansionHandler(dataset_name, db_config=DB_CONFIG)
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-        return shared_handlers[dataset_name]
+    if dataset_name not in shared_handlers:
+        logger.info(f"Creating a new SemanticExpansionHandler for dataset '{dataset_name}'.")
+        try:
+            shared_handlers[dataset_name] = SemanticExpansionHandler(dataset_name, db_config=MYSQL_CONFIG)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    return shared_handlers[dataset_name]
 
 class ExpansionRequest(BaseModel):
     query: str
@@ -59,9 +48,6 @@ async def expand_query_endpoint(
     request: ExpansionRequest,
     handler: SemanticExpansionHandler = Depends(get_handler)
 ):
-    """
-    Expands the user query with semantically related terms.
-    """
     try:
         result = handler.expand(request.query, request.top_k)
         return ExpansionResponse(**result)
@@ -69,5 +55,3 @@ async def expand_query_endpoint(
         logger.error(f"An error occurred during expansion: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during query expansion.")
 
-# --- How to run this service ---
-# uvicorn services.semantic_expansion_service:app --reload --port 8010
