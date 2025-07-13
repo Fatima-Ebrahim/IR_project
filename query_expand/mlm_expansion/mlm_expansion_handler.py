@@ -6,14 +6,10 @@ from typing import List, Set
 
 from utils.logger_config import logger
 
-# Suppress verbose logging from the transformers library
 hf_logging.set_verbosity_error()
 
 class MlmExpansionHandler:
-    """
-    Expands a query by using a pre-trained Masked Language Model (MLM)
-    to predict contextually relevant terms.
-    """
+   
     def __init__(self, model_name: str = 'bert-base-uncased'):
         logger.info(f"Initializing MLMQueryExpander with model: {model_name}")
         try:
@@ -24,9 +20,7 @@ class MlmExpansionHandler:
             raise RuntimeError(f"Could not initialize MLM model: {e}")
 
     def expand(self, query: str, top_k: int = 5) -> dict:
-        """
-        Generates expansion terms using predefined templates.
-        """
+        
         if not query:
             return {"expanded_query": "", "expansion_terms": []}
 
@@ -43,7 +37,7 @@ class MlmExpansionHandler:
                 results = self.mlm_pipeline(template, top_k=top_k)
                 for res in results:
                     term = res['token_str'].strip().lower()
-                    # Filter out stopwords, punctuation, and terms already in the query
+                    
                     if (term and term not in query.lower().split() and
                         term not in self.stop_words and
                         not all(char in string.punctuation for char in term)):

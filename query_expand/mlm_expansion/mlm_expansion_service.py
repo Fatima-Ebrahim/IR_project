@@ -7,14 +7,11 @@ from contextlib import asynccontextmanager
 from .mlm_expansion_handler import MlmExpansionHandler
 from utils.logger_config import logger
 
-# --- Singleton Pattern for the Handler ---
 shared_handler: MlmExpansionHandler | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Loads the heavy MLM model once when the service starts.
-    """
+    
     global shared_handler
     logger.info("MLM Expansion Service is starting up...")
     shared_handler = MlmExpansionHandler()
@@ -29,7 +26,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# --- Dependency Injection ---
+
 def get_handler() -> MlmExpansionHandler:
     return shared_handler
 
@@ -45,11 +42,6 @@ class ExpansionResponse(BaseModel):
 
 @app.post("/expand-mlm", response_model=ExpansionResponse, tags=["MLM Expansion"])
 async def expand_query_endpoint(request: ExpansionRequest, handler: HandlerDependency):
-    """
-    Expands the user query with contextually relevant terms predicted by an MLM.
-    """
+    
     result = handler.expand(request.query, request.top_k)
     return ExpansionResponse(**result)
-
-# --- How to run this service ---
-# uvicorn services.mlm_expansion_service:app --reload --port 8011
