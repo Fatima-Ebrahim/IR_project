@@ -52,25 +52,21 @@ def generate_embeddings_task(job_id: str, dataset_name: str):
     job_store[job_id]["status"] = "running"
     db_handler = None
     try:
-        # 1. Connect to DB and get documents
         db_handler = DatabaseHandler(config.MYSQL_CONFIG)
         db_handler.connect()
         documents = db_handler.get_processed_docs_for_indexing(dataset_name)
         if not documents:
             raise ValueError(f"No processed documents found for dataset '{dataset_name}'.")
 
-        # 2. Define paths for saving models
         model_dir = os.path.join(config.OUTPUT_DIR, dataset_name, "bert")
         vectorizer_path = os.path.join(model_dir, "vectorizer.joblib")
         matrix_path = os.path.join(model_dir, "matrix.joblib")
         doc_map_path = os.path.join(model_dir, "doc_ids_map.joblib")
-
-        # 3. Run the generation and saving process
+  
         docs_generated, embed_dim = embedding_handler.generate_and_save_embeddings(
             documents, vectorizer_path, matrix_path, doc_map_path
         )
 
-        # 4. Update job status to 'completed'
         job_store[job_id]["status"] = "completed"
         job_store[job_id]["details"] = {
             "documents_generated": docs_generated,
@@ -87,12 +83,10 @@ def generate_embeddings_task(job_id: str, dataset_name: str):
         if db_handler:
             db_handler.disconnect()
 
-# --- API Endpoints ---
+
 @app.post("/create-embeddings", response_model=JobCreationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_embeddings_job(request: EmbeddingRequest, background_tasks: BackgroundTasks):
-    """
-    Accepts a request to generate embeddings and starts it as a background job.
-    """
+   
     if embedding_handler is None:
         raise HTTPException(status_code=503, detail="Service is unavailable, model not loaded.")
 
@@ -113,7 +107,7 @@ async def create_embeddings_job(request: EmbeddingRequest, background_tasks: Bac
 
 @app.get("/job-status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
-    """Retrieves the status and result of a background job."""
+    
     job = job_store.get(job_id)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job ID not found.")
