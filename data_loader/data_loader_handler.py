@@ -1,4 +1,4 @@
-# handlers/data_loader_handler.py
+
 import os
 import pandas as pd
 from tqdm import tqdm
@@ -10,24 +10,18 @@ from utils.logger_config import logger
 import utils.parsers as parsers
 
 class DataLoaderHandler:
-    """
-    Handles loading data from various file formats into the database.
-    Each run creates its own database connection.
-    """
+   
     def __init__(self, dataset_configs: Dict[str, Any], base_dir: str, batch_size: int):
         self.dataset_configs = dataset_configs
         self.base_dir = base_dir
         self.batch_size = batch_size
 
     def load_dataset(self, dataset_name: str):
-        """Loads a specific dataset. Manages its own DB connection."""
         db_handler = None
         try:
-            # 1. إنشاء وتوصيل اتصال قاعدة البيانات
             db_handler = DatabaseHandler(config.MYSQL_CONFIG)
             db_handler.connect()
 
-            # 2. (الحل) التأكد من وجود الجداول قبل أي عملية أخرى
             db_handler.setup_tables()
 
             if dataset_name not in self.dataset_configs:
@@ -58,7 +52,7 @@ class DataLoaderHandler:
                 db_handler.disconnect()
 
     def _load_from_csv(self, file_path: str, parser_func, db_handler: DatabaseHandler, dataset_id: int):
-        """Helper to load data from a CSV file."""
+       
         docs_batch, total_inserted = [], 0
         try:
             for chunk in pd.read_csv(file_path, chunksize=self.batch_size, on_bad_lines='skip'):
@@ -77,7 +71,7 @@ class DataLoaderHandler:
         logger.info(f"Finished loading '{os.path.basename(file_path)}'. Total new documents: {total_inserted}")
 
     def _load_from_tsv(self, file_path: str, config_dict: dict, parser_func, db_handler: DatabaseHandler, dataset_id: int):
-        """Helper to load data from a TSV or line-based file."""
+        
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
