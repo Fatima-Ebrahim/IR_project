@@ -1,4 +1,4 @@
-# services/indexing_service.py
+
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Literal, Optional
@@ -6,10 +6,10 @@ from typing import Dict, Any, Literal, Optional
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 
-# --- تعديل: استيراد الكلاسات الحقيقية من مشروعك ---
+
 from indexing.inverted_index_handler import InvertedIndexHandler
 from database.database_handler import DatabaseHandler
-import  utils.config as config  # استيراد ملف الإعدادات الرئيسي
+import  utils.config as config  
 
 app = FastAPI(
     title="Final Integrated Indexing Service",
@@ -17,10 +17,9 @@ app = FastAPI(
     version="5.0.0"
 )
 
-# مخزن حالة المهام يبقى كما هو
+
 job_store: Dict[str, Dict[str, Any]] = {}
 
-# Pydantic Models تبقى كما هي
 class IndexRequest(BaseModel):
     dataset_name: str
 
@@ -40,14 +39,13 @@ class JobStatusResponse(BaseModel):
     details: Optional[IndexingDetails] = None
     error_message: Optional[str] = None
 
-# مهمة الخلفية النهائية
 def create_index_task(job_id: str, dataset_name: str, index_type: str = "inverted_index"):
-    """The background task that uses the real DatabaseHandler and config."""
+
     db_handler = None
     try:
         job_store[job_id]["status"] = "running"
         
-        # --- تعديل: استخدام DatabaseHandler الحقيقي مع الإعدادات من config.py ---
+      
         db_handler = DatabaseHandler(config.MYSQL_CONFIG)
         db_handler.connect()
 
@@ -72,7 +70,6 @@ def create_index_task(job_id: str, dataset_name: str, index_type: str = "inverte
         if db_handler:
             db_handler.disconnect()
 
-# Endpoints تبقى كما هي
 @app.post("/create-index", response_model=JobCreationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_index(request: IndexRequest, background_tasks: BackgroundTasks):
     for job_id, job_info in job_store.items():
