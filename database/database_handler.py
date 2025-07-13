@@ -1,14 +1,10 @@
-# handlers/database_handler.py
 import mysql.connector
 from mysql.connector import errorcode
 from typing import List, Dict, Any, Tuple
 from utils.logger_config import logger
 
 class DatabaseHandler:
-    """
-    Handles all MySQL database operations.
-    Updated to use the central logger.
-    """
+   
     def __init__(self, db_config):
         self.db_config = db_config
         self.connection = None
@@ -32,7 +28,6 @@ class DatabaseHandler:
             logger.info("MySQL connection closed.")
 
     def setup_tables(self):
-        """Creates all necessary tables in the database."""
         tables = {
             "datasets": """
                 CREATE TABLE IF NOT EXISTS `datasets` (
@@ -46,8 +41,10 @@ class DatabaseHandler:
                   `doc_id` VARCHAR(255) NOT NULL,
                   `raw_text` LONGTEXT,
                   `processed_text` LONGTEXT,
+                  `bert_processed_text` LONGTEXT,  -- Added new column for BERT
                   `dataset_id` INT,
                   `last_processed_at` TIMESTAMP NULL DEFAULT NULL,
+                  `bert_processed_at` TIMESTAMP NULL DEFAULT NULL,  -- Added new column
                   FOREIGN KEY (`dataset_id`) REFERENCES `datasets`(`id`) ON DELETE CASCADE,
                   UNIQUE KEY `doc_dataset_unique` (`doc_id`, `dataset_id`)
                 ) ENGINE=InnoDB
@@ -104,7 +101,13 @@ class DatabaseHandler:
 
     def get_unprocessed_docs(self, dataset_name: str, batch_size: int) -> List[Dict[str, Any]]:
         dataset_id = self.get_or_create_dataset_id(dataset_name)
-        query = "SELECT id, raw_text FROM documents WHERE dataset_id = %s AND (processed_text IS NULL OR processed_text = '') LIMIT %s"
+        query = """
+            SELECT id, raw_text FROM documents 
+            WHERE dataset_id = %s 
+            AND (processed_text IS NULL OR processed_text = '') 
+            AND last_processed_at IS NULL 
+            LIMIT %s
+        """
         self.cursor.execute(query, (dataset_id, batch_size))
         return self.cursor.fetchall()
 
@@ -119,11 +122,8 @@ class DatabaseHandler:
             logger.error(f"Bulk update failed with a database error: {err}")
             self.connection.rollback()
             return 0
-        
+
     def get_raw_docs_for_indexing(self, dataset_name: str) -> List[Dict[str, Any]]:
-        """
-        Fetches documents with raw text from a specific dataset.
-        """
         logger.info(f"Fetching RAW documents for dataset: {dataset_name}")
         dataset_id = self.get_or_create_dataset_id(dataset_name)
         query = "SELECT id, raw_text FROM documents WHERE dataset_id = %s AND raw_text IS NOT NULL AND raw_text != ''"
@@ -133,50 +133,119 @@ class DatabaseHandler:
         return docs
 
     def get_processed_docs_for_indexing(self, dataset_name: str) -> List[Dict[str, Any]]:
-    
-        query = "SELECT id, processed_text FROM documents WHERE dataset_id = (SELECT id FROM datasets WHERE name = %s) AND processed_text IS NOT NULL AND processed_text != ''"
+        query = """
+            SELECT id, bert_processed_text AS processed_text 
+            FROM documents 
+            WHERE dataset_id = (SELECT id FROM datasets WHERE name = %s) 
+            AND bert_processed_text IS NOT NULL 
+            AND bert_processed_text != ''
+            """
         self.cursor.execute(query, (dataset_name,))
         docs = self.cursor.fetchall()
-        print(f"📄 Found {len(docs)} processed documents for indexing.")
+        print(f"📄 Found {len(docs)} BERT-processed documents for indexing.")
         return docs
+    
     def find_documents_by_ids(self, doc_ids: List[int]) -> Dict[str, Dict[str, Any]]:
-        """
-        Fetches full document details for a given list of document IDs.
-
-        Args:
-            doc_ids: A list of integer primary keys for the documents.
-
-        Returns:
-            A dictionary mapping each document ID (as a string) to its data.
-        """
         if not doc_ids:
             return {}
 
         try:
-            # Using %s placeholders is crucial to prevent SQL injection
             format_strings = ','.join(['%s'] * len(doc_ids))
             query = f"SELECT id, doc_id, raw_text FROM documents WHERE id IN ({format_strings})"
-            
             self.cursor.execute(query, tuple(doc_ids))
             results = self.cursor.fetchall()
-            
-            # Convert the list of results into a dictionary for fast lookups
             return {str(row['id']): row for row in results}
-
         except mysql.connector.Error as err:
             logger.error(f"Database error in find_documents_by_ids: {err}")
             return {}
-        
+
     def get_all_raw_docs(self, dataset_name: str) -> List[Dict[str, Any]]:
-        """
-        Fetches the primary key (id) and raw_text for ALL documents in a given dataset.
-        WARNING: This can be memory-intensive for very large datasets.
-        """
         logger.info(f"Fetching ALL RAW documents for dataset: {dataset_name}")
         dataset_id = self.get_or_create_dataset_id(dataset_name)
-        # نختار فقط id و raw_text لتقليل استهلاك الذاكرة
         query = "SELECT id, doc_id, raw_text FROM documents WHERE dataset_id = %s AND raw_text IS NOT NULL AND raw_text != ''"
         self.cursor.execute(query, (dataset_id,))
         docs = self.cursor.fetchall()
         logger.info(f"Found {len(docs)} total raw documents for dataset '{dataset_name}'.")
         return docs
+
+    def count_unprocessed_docs(self, dataset_name: str) -> int:
+        dataset_id = self.get_or_create_dataset_id(dataset_name)
+        query = """
+            SELECT COUNT(*) AS count FROM documents 
+            WHERE dataset_id = %s 
+            AND (processed_text IS NULL OR processed_text = '') 
+            AND last_processed_at IS NULL
+        """
+        self.cursor.execute(query, (dataset_id,))
+        result = self.cursor.fetchone()
+        return result['count'] if result else 0
+    def create_topic_tables(self):
+            
+            topic_tables = {
+                "topics": """
+                    CREATE TABLE IF NOT EXISTS `topics` (
+                        id INT PRIMARY KEY,
+                        keywords TEXT
+                    ) ENGINE=InnoDB
+                """,
+                "document_topics": """
+                    CREATE TABLE IF NOT EXISTS `document_topics` (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        document_id INT,
+                        topic_id INT,
+                        probability FLOAT,
+                        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB
+                """
+            }
+            for ddl in topic_tables.values():
+                self.cursor.execute(ddl)
+            self.connection.commit()
+
+    def save_lda_topics(self, topic_keywords: List[Tuple[int, str]]):
+        self.cursor.executemany("INSERT INTO topics (id, keywords) VALUES (%s, %s) ON DUPLICATE KEY UPDATE keywords=VALUES(keywords)", topic_keywords)
+        self.connection.commit()
+
+    def save_document_topics(self, topics: List[Tuple[int, int, float]]):
+        
+        self.cursor.executemany(
+            "INSERT INTO document_topics (document_id, topic_id, probability) VALUES (%s, %s, %s)",
+            topics
+        )
+        self.connection.commit()
+        
+    def get_unprocessed_bert_docs(self, dataset_name: str, batch_size: int) -> List[Dict[str, Any]]:
+        dataset_id = self.get_or_create_dataset_id(dataset_name)
+        query = """
+            SELECT id, raw_text FROM documents 
+            WHERE dataset_id = %s 
+            AND (bert_processed_text IS NULL OR bert_processed_text = '') 
+            AND bert_processed_at IS NULL 
+            LIMIT %s
+        """
+        self.cursor.execute(query, (dataset_id, batch_size))
+        return self.cursor.fetchall()
+
+    def bulk_update_bert_processed_text(self, updates: List[Tuple[str, int]]) -> int:
+        if not updates: return 0
+        query = "UPDATE documents SET bert_processed_text = %s, bert_processed_at = NOW() WHERE id = %s"
+        try:
+            self.cursor.executemany(query, updates)
+            self.connection.commit()
+            return self.cursor.rowcount
+        except mysql.connector.Error as err:
+            logger.error(f"Bulk BERT update failed with a database error: {err}")
+            self.connection.rollback()
+            return 0
+
+    def count_unprocessed_bert_docs(self, dataset_name: str) -> int:
+        dataset_id = self.get_or_create_dataset_id(dataset_name)
+        query = """
+            SELECT COUNT(*) AS count FROM documents 
+            WHERE dataset_id = %s 
+            AND (bert_processed_text IS NULL OR bert_processed_text = '') 
+            AND bert_processed_at IS NULL
+        """
+        self.cursor.execute(query, (dataset_id,))
+        result = self.cursor.fetchone()
+        return result['count'] if result else 0
