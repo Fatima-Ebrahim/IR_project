@@ -6,7 +6,6 @@ from .query_suggestion_handler import QuerySuggestionHandler
 from utils import config
 from utils.logger_config import logger
 
-# --- Singleton Pattern for Handlers ---
 shared_handlers: Dict[str, QuerySuggestionHandler] = {}
 
 def get_db_handler():
@@ -20,13 +19,13 @@ def get_db_handler():
 
 def get_suggestion_handler(dataset_name: str, db: DatabaseHandler = Depends(get_db_handler)) -> QuerySuggestionHandler:
     if dataset_name not in shared_handlers:
-        logger.info(f"Creating a new QuerySuggestionHandler for dataset '{dataset_name}'. This may take a moment...")
+        logger.info(f"Creating new QuerySuggestionHandler for dataset '{dataset_name}'")
         try:
             shared_handlers[dataset_name] = QuerySuggestionHandler(dataset_name, db)
         except FileNotFoundError as e:
-            raise HTTPException(status_code=404, detail=f"Assets for '{dataset_name}' not found. Please build TF-IDF representation first. Error: {e}")
+            raise HTTPException(status_code=404, detail=f"Assets for '{dataset_name}' not found. Error: {e}")
         except Exception as e:
-            logger.error(f"Failed to create suggestion handler for '{dataset_name}': {e}", exc_info=True)
+            logger.error(f"Failed to create suggestion handler: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Failed to initialize suggestion service.")
     return shared_handlers[dataset_name]
 
@@ -56,5 +55,5 @@ async def suggest_query(
             full_queries=result.get("full_queries", [])
         )
     except Exception as e:
-        logger.error(f"An error occurred during suggestion generation: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An internal error occurred during suggestion generation.")
+        logger.error(f"Error during suggestion generation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error during suggestion generation.")
