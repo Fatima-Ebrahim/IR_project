@@ -1,4 +1,4 @@
-# services/bert_search_service.py
+
 import httpx
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
@@ -10,9 +10,8 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# (تعديل) تحديث عناوين الخدمات للمنافذ الجديدة
-QUERY_PROCESSOR_URL = "http://127.0.0.1:8032" # BERT Query Processor new port
-BERT_RANKING_URL = "http://127.0.0.1:8033"    # BERT Ranking new port
+QUERY_PROCESSOR_URL = "http://127.0.0.1:8032" 
+BERT_RANKING_URL = "http://127.0.0.1:8033"    
 
 class SearchRequest(BaseModel):
     query: str
@@ -26,12 +25,10 @@ class SearchResult(BaseModel):
 
 @app.post("/search/bert", response_model=List[SearchResult], tags=["BERT Search"])
 async def search_bert(request: SearchRequest):
-    """
-    Handles the end-to-end BERT search pipeline.
-    """
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
-            # Step 1: Get the query vector from the Query Processor Service
+            
             processor_payload = {"query": request.query}
             processor_url = f"{QUERY_PROCESSOR_URL}/process-query/bert"
             
@@ -39,9 +36,9 @@ async def search_bert(request: SearchRequest):
             processor_response.raise_for_status()
             query_vector = processor_response.json()['query_vector']
 
-            # Step 2: Send the query vector to the dedicated BERT Ranking Service
+           
             ranking_payload = {
-                "query_vector": [query_vector], # Ensure it's a 2D list
+                "query_vector": [query_vector],
                 "top_k": request.top_k
             }
             ranking_url = f"{BERT_RANKING_URL}/rank-bert/{request.dataset_name}"
