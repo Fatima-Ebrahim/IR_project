@@ -1,11 +1,10 @@
-# services/bert_query_processor_service.py
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import List
 
-# استيراد الـ handler الجديد
 from search.bert_search.bert_query_processing.bert_query_processing_handler import BertQueryProcessorHandler
 from utils.logger_config import logger
+from utils.config import QUERY_PREPROCESSOR_BERT_URL
 
 app = FastAPI(
     title="BERT Query Processor Service",
@@ -13,10 +12,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# إنشاء نسخة واحدة من الـ handler عند بدء تشغيل الخدمة لتحسين الأداء
-# هذا يضمن أن نموذج BERT يتم تحميله في الذاكرة مرة واحدة فقط
 try:
-    query_handler = BertQueryProcessorHandler()
+
+    query_handler = BertQueryProcessorHandler(preprocess_url=QUERY_PREPROCESSOR_BERT_URL)
 except Exception as e:
     logger.error(f"Fatal error during service startup: Could not initialize BertQueryProcessorHandler. {e}")
     query_handler = None
@@ -33,9 +31,7 @@ class VectorResponse(BaseModel):
     tags=["BERT Query Processing"]
 )
 async def process_bert_query(request: QueryRequest):
-    """
-    Takes a raw query and returns its corresponding BERT vector embedding.
-    """
+   
     if query_handler is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
