@@ -1,0 +1,5 @@
+Cloud computing provides on-demand access to computing resources
+DevOps practices streamline software development and deployment
+Microservices architecture enables scalable and maintainable applications
+Containerization with Docker simplifies application deployment
+Kubernetes orchestrates containerized applications at scale

@@ -6,7 +6,7 @@ from typing import List
 import utils.config as config
 from database.database_handler import DatabaseHandler
 from data_loader.data_loader_handler import DataLoaderHandler
-from handlers.text_processing_handler import TextProcessingHandler
+from text_processing.text_processing_handler import TextProcessingHandler
 from utils.logger_config import logger
 
 # Import dataset management router for user uploads
